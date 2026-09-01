@@ -204,7 +204,7 @@ function TelemetryDashboard() {
       <Panel title="ACTUADORES" meta="STREAM 10 HZ" className="motors-panel"><MotorTable motors={motors}/></Panel>
       {telemetry.modelo?.toLowerCase() === 'g1' && (
         <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
-          <RobotViewer />
+          <RobotViewer motors={motors} />
         </Panel>
       )}
     </main>
