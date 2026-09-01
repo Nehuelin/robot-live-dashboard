@@ -1,17 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 
-const SAMPLE_TELEMETRY = {
-  modelo: 'g1', ts: 14.77,
-  motores: Array.from({ length: 29 }, (_, id) => ({
-    id,
-    nombre: ['L_hip_yaw', 'L_hip_roll', 'L_hip_pitch', 'L_knee', 'L_ankle_pitch', 'L_ankle_roll', 'R_hip_yaw', 'R_hip_roll', 'R_hip_pitch', 'R_knee', 'R_ankle_pitch', 'R_ankle_roll', 'torso_yaw', 'torso_roll', 'torso_pitch', 'L_shoulder_pitch', 'L_shoulder_roll', 'L_shoulder_yaw', 'L_elbow', 'L_wrist_roll', 'L_wrist_pitch', 'L_wrist_yaw', 'R_shoulder_pitch', 'R_shoulder_roll', 'R_shoulder_yaw', 'R_elbow', 'R_wrist_roll', 'R_wrist_pitch', 'R_wrist_yaw'][id],
-    angulo: Number((-29 + id * 2.11).toFixed(2)), velocidad: Number((Math.sin(id) * 2.1).toFixed(3)),
-    torque: Number((1 + (id * 1.17) % 8).toFixed(2)), temperatura: 34 + (id % 9),
-  })),
-  imu: { roll: 0, pitch: 2.02, yaw: 0, ax: 0.124, ay: -0.056, az: 9.81 },
-  bms: { soc: 92, corriente: 7.64, temperatura: 32.3, celdas: [3.724, 3.719, 3.705, 3.695, 3.699, 3.712, 3.723, 3.722] },
-  fuerzas: { R_foot: 0, L_foot: 1 },
+const EMPTY_TELEMETRY = { modelo: '', ts: 0, motores: [], imu: {}, bms: {}, fuerzas: {} };
+
+const normalizeTelemetry = (payload = {}) => ({
+  modelo: payload.modelo || '',
+  ts: Number(payload.ts ?? 0),
+  motores: Array.isArray(payload.motores)
+    ? payload.motores.map((motor, idx) => ({
+        id: Number(motor.id ?? idx),
+        nombre: motor.nombre || `motor_${idx}`,
+        angulo: Number(motor.angulo ?? 0),
+        velocidad: Number(motor.velocidad ?? 0),
+        torque: Number(motor.torque ?? 0),
+        temperatura: Number(motor.temperatura ?? 0),
+      }))
+    : [],
+  imu: payload.imu || {},
+  bms: payload.bms || {},
+  fuerzas: payload.fuerzas || {},
+});
+
+const sanitizeBaseUrl = (value = '') => {
+  const cleaned = String(value).trim().replace(/\/+$/, '');
+  if (!cleaned) return '';
+  try {
+    return new URL(cleaned).origin;
+  } catch {
+    return cleaned;
+  }
+};
+
+const buildApiUrl = (baseUrl, path) => {
+  const origin = sanitizeBaseUrl(baseUrl);
+  if (!origin) return '';
+  return `${origin}${path}`;
 };
 
 const fmt = (value, digits = 1) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
@@ -60,7 +83,11 @@ function Battery({ bms = {} }) {
 function FootForces({ forces = {}, model }) {
   const entries = Object.entries(forces);
   if (!entries.length) return <div className="empty-state">Sin datos de apoyo para {model?.toUpperCase() || 'este modelo'}.</div>;
-  return <div className="feet-grid">{entries.map(([name, active]) => <div className={`foot ${active ? 'grounded' : ''}`} key={name}><i /><span>{name.replace('_foot', '')}</span><b>{active ? 'APOYO' : 'AIRE'}</b></div>)}</div>;
+  return <div className="feet-grid">{entries.map(([name, active]) => {
+    const grounded = Number(active) > 0;
+    const label = String(name).replace(/_foot|_FOOT/gi, '').replace(/_/g, ' ');
+    return <div className={`foot ${grounded ? 'grounded' : ''}`} key={name}><i /><span>{label}</span><b>{grounded ? 'APOYO' : 'AIRE'}</b></div>;
+  })}</div>;
 }
 
 function MotorTable({ motors }) {
@@ -76,25 +103,91 @@ function MotorTable({ motors }) {
 }
 
 function TelemetryDashboard() {
-  const [telemetry, setTelemetry] = useState(SAMPLE_TELEMETRY);
-  const [url, setUrl] = useState(() => localStorage.getItem('robot-api-url') || 'http://10.0.0.5:8001');
-  const [status, setStatus] = useState('demo');
+  const [telemetry, setTelemetry] = useState(EMPTY_TELEMETRY);
+  const [url, setUrl] = useState(() => localStorage.getItem('robot-api-url') || 'http://10.100.10.14:8001');
+  const [status, setStatus] = useState('connecting');
   const socketRef = useRef(null); const retryRef = useRef(null); const intentionalClose = useRef(false);
 
-  const connect = () => {
+  const fetchTelemetry = async (baseUrl) => {
+    const apiUrl = buildApiUrl(baseUrl, '/telemetria');
+    if (!apiUrl) {
+      setStatus('error');
+      return null;
+    }
+
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = normalizeTelemetry(await response.json());
+      setTelemetry(payload);
+      setStatus('live');
+      return payload;
+    } catch (error) {
+      setStatus('error');
+      return null;
+    }
+  };
+
+  const connect = async () => {
     clearTimeout(retryRef.current);
     intentionalClose.current = false;
-    if (socketRef.current) { socketRef.current.onclose = null; socketRef.current.close(); }
-    setStatus('connecting'); localStorage.setItem('robot-api-url', url);
+    if (socketRef.current) {
+      socketRef.current.onclose = null;
+      socketRef.current.close();
+    }
+
+    const baseUrl = sanitizeBaseUrl(url);
+    if (!baseUrl) {
+      setStatus('error');
+      return;
+    }
+
+    setStatus('connecting');
+    localStorage.setItem('robot-api-url', baseUrl);
+    await fetchTelemetry(baseUrl);
+
     let wsUrl;
-    try { const parsed = new URL(url); parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'; parsed.pathname = '/ws'; wsUrl = parsed.toString(); } catch { setStatus('error'); return; }
-    const ws = new WebSocket(wsUrl); socketRef.current = ws;
+    try {
+      const parsed = new URL(baseUrl);
+      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      parsed.pathname = '/ws';
+      wsUrl = parsed.toString();
+    } catch {
+      setStatus('error');
+      return;
+    }
+
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
     ws.onopen = () => setStatus('live');
-    ws.onmessage = (event) => { try { setTelemetry(JSON.parse(event.data)); setStatus('live'); } catch { setStatus('error'); } };
+    ws.onmessage = (event) => {
+      try {
+        const nextTelemetry = normalizeTelemetry(JSON.parse(event.data));
+        setTelemetry(nextTelemetry);
+        setStatus('live');
+      } catch {
+        setStatus('error');
+      }
+    };
     ws.onerror = () => setStatus('error');
-    ws.onclose = () => { if (!intentionalClose.current) { setStatus('error'); retryRef.current = setTimeout(connect, 3000); } };
+    ws.onclose = () => {
+      if (!intentionalClose.current) {
+        setStatus('error');
+        retryRef.current = setTimeout(() => {
+          connect();
+        }, 3000);
+      }
+    };
   };
-  useEffect(() => () => { intentionalClose.current = true; clearTimeout(retryRef.current); socketRef.current?.close(); }, []);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      intentionalClose.current = true;
+      clearTimeout(retryRef.current);
+      socketRef.current?.close();
+    };
+  }, []);
 
   const motors = Array.isArray(telemetry.motores) ? telemetry.motores : [];
   const avgTemp = motors.length ? motors.reduce((sum, motor) => sum + Number(motor.temperatura || 0), 0) / motors.length : 0;
@@ -102,7 +195,7 @@ function TelemetryDashboard() {
 
   return <div className="dashboard-container">
     <header className="dashboard-header"><div><p>UNITREE · LIVE SYSTEMS</p><h1>TELEMETRÍA <span>// MOTION LAB</span></h1></div><div className="header-summary"><Metric label="MOTORES" value={motors.length} unit="activos"/><Metric label="TEMP. MEDIA" value={fmt(avgTemp)} unit="°C"/><Metric label="TORQUE PICO" value={fmt(maxTorque, 2)} unit="Nm"/></div></header>
-    <ConnectionBar url={url} onUrlChange={setUrl} status={status} onConnect={connect} model={telemetry.modelo} timestamp={telemetry.ts}/>
+    <ConnectionBar url={url} onUrlChange={setUrl} status={status} onConnect={connect} model={telemetry.modelo} timestamp={telemetry.ts} />
     <main className="telemetry-layout">
       <Panel title="ORIENTACIÓN / IMU" meta="6-AXIS" className="orientation-panel"><Orientation imu={telemetry.imu}/></Panel>
       <Panel title="SISTEMA DE ENERGÍA" meta="BMS" className="battery-panel"><Battery bms={telemetry.bms}/></Panel>
