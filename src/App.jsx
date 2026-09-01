@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import RobotViewer from './RobotViewer';
 
 const EMPTY_TELEMETRY = { modelo: '', ts: 0, motores: [], imu: {}, bms: {}, fuerzas: {} };
 
@@ -201,6 +202,11 @@ function TelemetryDashboard() {
       <Panel title="SISTEMA DE ENERGÍA" meta="BMS" className="battery-panel"><Battery bms={telemetry.bms}/></Panel>
       <Panel title="CONTACTO CON SUPERFICIE" meta={telemetry.modelo?.toUpperCase()} className="forces-panel"><FootForces forces={telemetry.fuerzas} model={telemetry.modelo}/></Panel>
       <Panel title="ACTUADORES" meta="STREAM 10 HZ" className="motors-panel"><MotorTable motors={motors}/></Panel>
+      {telemetry.modelo?.toLowerCase() === 'g1' && (
+        <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
+          <RobotViewer />
+        </Panel>
+      )}
     </main>
   </div>;
 }
