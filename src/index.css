@@ -1,3 +1,3 @@
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 :root{--bg:#080b0f;--panel:#10151b;--line:#26313b;--text:#e7edf2;--muted:#7d8b97;--cyan:#42e8e0;--cyan-dim:rgba(66,232,224,.12);--amber:#ffba52;--red:#ff665f;--green:#68e0a0;--font:'Rajdhani',sans-serif;--mono:'Share Tech Mono',monospace}
-*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(circle at 60% -20%,#14212a 0,transparent 40%),var(--bg);color:var(--text);font-family:var(--font)}button,input{font:inherit}
+*{box-sizing:border-box}html{background:var(--bg);height:100%}body{margin:0;min-width:320px;height:100vh;overflow:hidden;background:radial-gradient(circle at 60% -20%,#14212a 0,transparent 40%),var(--bg);color:var(--text);font-family:var(--font)}button,input{font:inherit}
