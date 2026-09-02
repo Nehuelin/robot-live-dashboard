@@ -27,34 +27,70 @@ function ModelG1({ motors = [], imu }) {
     const deg2rad = Math.PI / 180;
 
     if (isDancing) {
-      const t = state.clock.elapsedTime * 6;
-      
-      // Disco Squats (rebote de rodillas y caderas)
-      const squat = -Math.abs(Math.sin(t * 0.5)) * 40; 
-      if (nodes['L_knee']) nodes['L_knee'].rotation.x = squat * deg2rad;
-      if (nodes['R_knee']) nodes['R_knee'].rotation.x = squat * deg2rad;
-      if (nodes['L_hip']) nodes['L_hip'].rotation.x = -squat * 0.5 * deg2rad;
-      if (nodes['R_hip']) nodes['R_hip'].rotation.x = -squat * 0.5 * deg2rad;
-      
-      // Movimiento de pelvis y torso (Saturday Night Fever)
-      if (nodes['torso']) nodes['torso'].rotation.y = Math.sin(t * 0.25) * 30 * deg2rad;
-      if (nodes['pelvis']) nodes['pelvis'].rotation.z = Math.cos(t * 0.5) * 15 * deg2rad;
-      
-      // Brazos alternando arriba y abajo (Disco)
-      const armBeat = Math.sin(t * 0.25) > 0;
+      const t = state.clock.elapsedTime;
+      const bpm = 120;
+      const beat = (t * bpm / 60) * Math.PI * 2; 
+
+      // Bounce vertical
+      scene.position.y = Math.abs(Math.sin(beat)) * 0.04;
+
+      // Pelvis: solo rotamos en Z (lateral) para no arruinar la rotacion X base del modelo
+      if (nodes['pelvis']) {
+        nodes['pelvis'].rotation.z = Math.sin(beat * 0.5) * 12 * deg2rad;
+      }
+
+      // Torso: solo rotamos en Y (twist)
+      if (nodes['torso']) {
+        nodes['torso'].rotation.y = Math.sin(beat * 0.5) * 20 * deg2rad;
+      }
+
+      // Piernas
+      const legPhaseL = Math.sin(beat * 0.5);
+      const legPhaseR = Math.sin(beat * 0.5 + Math.PI);
+
+      if (nodes['L_hip']) {
+        nodes['L_hip'].rotation.x = legPhaseL * 15 * deg2rad;
+        nodes['L_hip'].rotation.z = Math.sin(beat * 0.5) * 5 * deg2rad;
+      }
+      if (nodes['R_hip']) {
+        nodes['R_hip'].rotation.x = legPhaseR * 15 * deg2rad;
+        nodes['R_hip'].rotation.z = Math.sin(beat * 0.5 + Math.PI) * 5 * deg2rad;
+      }
+
+      const kneeBase = -15; 
+      if (nodes['L_knee']) nodes['L_knee'].rotation.x = (kneeBase + Math.abs(legPhaseL) * -20) * deg2rad;
+      if (nodes['R_knee']) nodes['R_knee'].rotation.x = (kneeBase + Math.abs(legPhaseR) * -20) * deg2rad;
+
+      // Brazos
+      const armWaveL = Math.sin(beat * 0.5);
+      const armWaveR = Math.sin(beat * 0.5 + Math.PI); 
+
       if (nodes['L_shoulder']) {
-        nodes['L_shoulder'].rotation.x = (armBeat ? 130 : 0) * deg2rad;
-        nodes['L_shoulder'].rotation.z = (armBeat ? 30 : 20) * deg2rad;
+        const raise = (armWaveL * 0.5 + 0.5); 
+        nodes['L_shoulder'].rotation.x = (raise * 130 + 10) * deg2rad;
+        nodes['L_shoulder'].rotation.z = (20 + raise * 15) * deg2rad;
+        nodes['L_shoulder'].rotation.y = Math.sin(beat * 0.25) * 15 * deg2rad;
       }
       if (nodes['R_shoulder']) {
-        nodes['R_shoulder'].rotation.x = (!armBeat ? 130 : 0) * deg2rad;
-        nodes['R_shoulder'].rotation.z = (!armBeat ? -30 : -20) * deg2rad;
+        const raise = (armWaveR * 0.5 + 0.5);
+        nodes['R_shoulder'].rotation.x = (raise * 130 + 10) * deg2rad;
+        nodes['R_shoulder'].rotation.z = -(20 + raise * 15) * deg2rad;
+        nodes['R_shoulder'].rotation.y = Math.sin(beat * 0.25 + Math.PI) * 15 * deg2rad;
       }
-      if (nodes['L_elbow']) nodes['L_elbow'].rotation.x = (armBeat ? -20 : -60) * deg2rad;
-      if (nodes['R_elbow']) nodes['R_elbow'].rotation.x = (!armBeat ? -20 : -60) * deg2rad;
 
-      return; // Cortamos aca para que no aplique la telemetria real mientras baila
+      if (nodes['L_elbow']) nodes['L_elbow'].rotation.x = (-30 + Math.sin(beat * 0.5 - 0.4) * -25) * deg2rad;
+      if (nodes['R_elbow']) nodes['R_elbow'].rotation.x = (-30 + Math.sin(beat * 0.5 + Math.PI - 0.4) * -25) * deg2rad;
+
+      return; 
     }
+    
+    // Si NO esta bailando, limpiamos rotaciones residuales del baile 
+    // en huesos que la telemetria quizas no sobreescriba (o si tarda en llegar)
+    scene.position.y = 0;
+    if (nodes['pelvis']) nodes['pelvis'].rotation.z = 0;
+    // No reseteo el torso.y aca porque la telemetria ("torso_yaw") deberia pisarlo, 
+    // pero si lo reseteo ayudo a que no quede torcido si no hay telemetria:
+    if (nodes['torso']) nodes['torso'].rotation.y = 0;
 
     const motorDict = {};
     for (let i = 0; i < motors.length; i++) {
