@@ -2,7 +2,6 @@ import React, { Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Environment, Center, ContactShadows, Grid } from '@react-three/drei';
 
-// 🤫 Easter Egg Hook
 function useDanceMode() {
   const [dancing, setDancing] = React.useState(false);
   React.useEffect(() => {
@@ -31,20 +30,16 @@ function ModelG1({ motors = [], imu }) {
       const bpm = 120;
       const beat = (t * bpm / 60) * Math.PI * 2; 
 
-      // Bounce vertical
       scene.position.y = Math.abs(Math.sin(beat)) * 0.04;
 
-      // Pelvis: solo rotamos en Z (lateral) para no arruinar la rotacion X base del modelo
       if (nodes['pelvis']) {
         nodes['pelvis'].rotation.z = Math.sin(beat * 0.5) * 12 * deg2rad;
       }
 
-      // Torso: solo rotamos en Y (twist)
       if (nodes['torso']) {
         nodes['torso'].rotation.y = Math.sin(beat * 0.5) * 20 * deg2rad;
       }
 
-      // Piernas
       const legPhaseL = Math.sin(beat * 0.5);
       const legPhaseR = Math.sin(beat * 0.5 + Math.PI);
 
@@ -61,7 +56,6 @@ function ModelG1({ motors = [], imu }) {
       if (nodes['L_knee']) nodes['L_knee'].rotation.x = (kneeBase + Math.abs(legPhaseL) * -20) * deg2rad;
       if (nodes['R_knee']) nodes['R_knee'].rotation.x = (kneeBase + Math.abs(legPhaseR) * -20) * deg2rad;
 
-      // Brazos
       const armWaveL = Math.sin(beat * 0.5);
       const armWaveR = Math.sin(beat * 0.5 + Math.PI); 
 
@@ -84,12 +78,8 @@ function ModelG1({ motors = [], imu }) {
       return; 
     }
     
-    // Si NO esta bailando, limpiamos rotaciones residuales del baile 
-    // en huesos que la telemetria quizas no sobreescriba (o si tarda en llegar)
     scene.position.y = 0;
     if (nodes['pelvis']) nodes['pelvis'].rotation.z = 0;
-    // No reseteo el torso.y aca porque la telemetria ("torso_yaw") deberia pisarlo, 
-    // pero si lo reseteo ayudo a que no quede torcido si no hay telemetria:
     if (nodes['torso']) nodes['torso'].rotation.y = 0;
 
     const motorDict = {};
@@ -97,8 +87,6 @@ function ModelG1({ motors = [], imu }) {
       motorDict[motors[i].nombre] = motors[i].angulo;
     }
 
-    // Aplicamos la rotacion real del IMU a toda la malla. 
-    // Esto es lo que determina si el robot esta parado o acostado en el mundo real.
     if (imu && imu.pitch !== undefined) {
       scene.rotation.set(
         (imu.pitch || 0) * deg2rad,
@@ -110,14 +98,11 @@ function ModelG1({ motors = [], imu }) {
     const applyRot = (nodeName, pitchName, yawName, rollName) => {
       const node = nodes[nodeName];
       if (!node) return;
-      // Invertimos el signo del Pitch (X) porque el modelo 3D tiene los ejes invertidos
       if (pitchName && motorDict[pitchName] !== undefined) node.rotation.x = -motorDict[pitchName] * deg2rad;
       if (yawName && motorDict[yawName] !== undefined) node.rotation.y = motorDict[yawName] * deg2rad;
       if (rollName && motorDict[rollName] !== undefined) node.rotation.z = motorDict[rollName] * deg2rad;
     };
 
-    // Ahora que el modelo tiene el hueso 'pelvis' como padre, podemos 
-    // mover el torso de forma independiente a las piernas.
     applyRot('torso', 'torso_pitch', 'torso_yaw', 'torso_roll');
 
     applyRot('L_shoulder', 'L_shoulder_pitch', 'L_shoulder_yaw', 'L_shoulder_roll');

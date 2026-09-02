@@ -135,7 +135,6 @@ function TelemetryDashboard() {
       'fuerzas', 'motores'
     ];
     const rows = muestras.map(m => {
-      // Helper to safely stringify and escape JSON for CSV
       const escapeJSON = (obj) => `"${JSON.stringify(obj || {}).replace(/"/g, '""')}"`;
       
       return [
