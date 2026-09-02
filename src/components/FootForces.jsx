@@ -1,12 +1,19 @@
 import React from 'react';
 
 export function FootForces({ forces = {}, model }) {
-  const feet = [
-    { key: 'FR', label: 'FR' },
-    { key: 'FL', label: 'FL' },
-    { key: 'RR', label: 'RR' },
-    { key: 'RL', label: 'RL' }
-  ];
+  const keys = Object.keys(forces);
+  
+  let feet = [];
+  if (keys.length > 0) {
+    feet = keys.map(k => ({
+      key: k,
+      label: k.replace('_foot', '').replace('foot_', '').toUpperCase()
+    }));
+  } else {
+    feet = model?.toLowerCase() === 'g1'
+      ? [ { key: 'R_foot', label: 'R' }, { key: 'L_foot', label: 'L' } ]
+      : [ { key: 'FR', label: 'FR' }, { key: 'FL', label: 'FL' }, { key: 'RR', label: 'RR' }, { key: 'RL', label: 'RL' } ];
+  }
   
   return (
     <div className="feet-grid">

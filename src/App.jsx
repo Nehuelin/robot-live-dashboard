@@ -18,8 +18,9 @@ function TelemetryDashboard() {
   const [muestras, setMuestras] = useState([]);
   const [url, setUrl] = useState(() => localStorage.getItem('robot-api-url') || 'http://10.100.45.68:8001');
   const [status, setStatus] = useState('connecting');
-  const socketRef = useRef(null); 
-  const retryRef = useRef(null); 
+  const [robotInfo, setRobotInfo] = useState(null);
+  const socketRef = useRef(null);
+  const retryRef = useRef(null);
   const intentionalClose = useRef(false);
 
   const fetchTelemetry = async (baseUrl) => {
@@ -42,6 +43,19 @@ function TelemetryDashboard() {
     }
   };
 
+  const fetchInfo = async (baseUrl) => {
+    const apiUrl = buildApiUrl(baseUrl, '/info');
+    if (!apiUrl) return;
+    try {
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        setRobotInfo(await response.json());
+      }
+    } catch (error) {
+      console.warn('Could not fetch /info', error);
+    }
+  };
+
   const connect = async () => {
     clearTimeout(retryRef.current);
     intentionalClose.current = false;
@@ -58,6 +72,7 @@ function TelemetryDashboard() {
 
     setStatus('connecting');
     localStorage.setItem('robot-api-url', baseUrl);
+    await fetchInfo(baseUrl);
     await fetchTelemetry(baseUrl);
 
     let wsUrl;
@@ -127,6 +142,10 @@ function TelemetryDashboard() {
     URL.revokeObjectURL(urlBlob);
   };
 
+  const isG1 = robotInfo
+    ? (robotInfo.tipo?.toLowerCase() === 'g1' || robotInfo.nombre?.toLowerCase() === 'g1' || robotInfo.modelo?.toLowerCase() === 'g1')
+    : (telemetry.modelo?.toLowerCase() === 'g1');
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -143,39 +162,39 @@ function TelemetryDashboard() {
               📥 EXPORTAR CSV
             </button>
           )}
-          <Metric label="MOTORES" value={motors.length} unit="activos"/>
-          <Metric label="TEMP. MEDIA" value={fmt(avgTemp)} unit="°C"/>
-          <Metric label="TORQUE PICO" value={fmt(maxTorque, 2)} unit="Nm"/>
+          <Metric label="MOTORES" value={motors.length} unit="activos" />
+          <Metric label="TEMP. MEDIA" value={fmt(avgTemp)} unit="°C" />
+          <Metric label="TORQUE PICO" value={fmt(maxTorque, 2)} unit="Nm" />
         </div>
       </header>
-      
-      <ConnectionBar 
-        url={url} 
-        onUrlChange={setUrl} 
-        status={status} 
-        onConnect={connect} 
-        model={telemetry.modelo} 
-        timestamp={telemetry.ts} 
+
+      <ConnectionBar
+        url={url}
+        onUrlChange={setUrl}
+        status={status}
+        onConnect={connect}
+        model={telemetry.modelo}
+        timestamp={telemetry.ts}
       />
-      
+
       <main className="telemetry-layout">
         <Panel title="ORIENTACIÓN / IMU" meta="6-AXIS" className="orientation-panel">
           <OrientationPanel imu={telemetry.imu} timestamp={telemetry.ts} />
         </Panel>
-        
+
         <Panel title="SISTEMA DE ENERGÍA" meta="BMS" className="battery-panel">
           <BatteryPanel bms={telemetry.bms} />
         </Panel>
-        
+
         <Panel title="CONTACTO CON SUPERFICIE" meta={telemetry.modelo?.toUpperCase()} className="forces-panel">
           <FootForces forces={telemetry.fuerzas} model={telemetry.modelo} />
         </Panel>
-        
+
         <Panel title="ACTUADORES" meta="STREAM 10 HZ" className="motors-panel">
           <MotorTable motors={motors} />
         </Panel>
-        
-        {telemetry.modelo?.toLowerCase() === 'g1' ? (
+
+        {isG1 ? (
           <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
             <RobotViewer motors={motors} modelType="g1" />
           </Panel>
