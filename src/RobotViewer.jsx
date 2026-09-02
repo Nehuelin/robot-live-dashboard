@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Environment, Center, ContactShadows, Grid } from '@react-three/drei';
 
-function ModelG1({ motors = [] }) {
+function ModelG1({ motors = [], imu }) {
   const { scene, nodes } = useGLTF('/Ottoman.glb');
   
   useFrame(() => {
@@ -13,15 +13,30 @@ function ModelG1({ motors = [] }) {
     }
     const deg2rad = Math.PI / 180;
 
+    // Aplicamos la rotacion real del IMU a toda la malla. 
+    // Esto es lo que determina si el robot esta parado o acostado en el mundo real.
+    if (imu && imu.pitch !== undefined) {
+      scene.rotation.set(
+        (imu.pitch || 0) * deg2rad,
+        (imu.yaw || 0) * deg2rad,
+        (imu.roll || 0) * deg2rad
+      );
+    }
+
     const applyRot = (nodeName, pitchName, yawName, rollName) => {
       const node = nodes[nodeName];
       if (!node) return;
-      if (pitchName && motorDict[pitchName] !== undefined) node.rotation.x = motorDict[pitchName] * deg2rad;
+      // Invertimos el signo del Pitch (X) porque el modelo 3D tiene los ejes invertidos
+      if (pitchName && motorDict[pitchName] !== undefined) node.rotation.x = -motorDict[pitchName] * deg2rad;
       if (yawName && motorDict[yawName] !== undefined) node.rotation.y = motorDict[yawName] * deg2rad;
       if (rollName && motorDict[rollName] !== undefined) node.rotation.z = motorDict[rollName] * deg2rad;
     };
 
-    applyRot('torso', 'torso_pitch', 'torso_yaw', 'torso_roll');
+    // NO aplicamos rotacion de motores al 'torso'. 
+    // En este GLTF, el 'torso' es el hueso ROOT (padre de las piernas). 
+    // Si le aplicamos el motor de la cintura, todo el robot (incluidas las piernas) gira hacia arriba.
+    // applyRot('torso', 'torso_pitch', 'torso_yaw', 'torso_roll');
+
     applyRot('L_shoulder', 'L_shoulder_pitch', 'L_shoulder_yaw', 'L_shoulder_roll');
     applyRot('L_elbow', 'L_elbow', null, null);
     applyRot('R_shoulder', 'R_shoulder_pitch', 'R_shoulder_yaw', 'R_shoulder_roll');

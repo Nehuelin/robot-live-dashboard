@@ -196,11 +196,11 @@ function TelemetryDashboard() {
 
         {isG1 ? (
           <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
-            <RobotViewer motors={motors} modelType="g1" />
+            <RobotViewer motors={motors} modelType="g1" imu={telemetry.imu} />
           </Panel>
         ) : (
           <Panel title="VISOR 3D (PERRO)" meta={telemetry.modelo?.toUpperCase() || 'CUADRÚPEDO'} className="model-panel">
-            <RobotViewer motors={motors} modelType="quadruped" />
+            <RobotViewer motors={motors} modelType="quadruped" imu={telemetry.imu} />
           </Panel>
         )}
       </main>
