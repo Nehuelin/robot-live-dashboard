@@ -128,10 +128,34 @@ function TelemetryDashboard() {
 
   const exportCSV = () => {
     if (muestras.length === 0) return;
-    const headers = ['ts', 'modelo', 'imu_roll', 'imu_pitch', 'imu_yaw', 'bms_soc', 'bms_corriente', 'bms_temp'];
-    const rows = muestras.map(m => [
-      m.ts, m.modelo, m.imu.roll, m.imu.pitch, m.imu.yaw, m.bms.soc, m.bms.corriente, m.bms.temperatura
-    ].join(','));
+    const headers = [
+      'ts', 'modelo',
+      'imu_roll', 'imu_pitch', 'imu_yaw', 'imu_ax', 'imu_ay', 'imu_az',
+      'bms_soc', 'bms_corriente', 'bms_temp', 'bms_celdas',
+      'fuerzas', 'motores'
+    ];
+    const rows = muestras.map(m => {
+      // Helper to safely stringify and escape JSON for CSV
+      const escapeJSON = (obj) => `"${JSON.stringify(obj || {}).replace(/"/g, '""')}"`;
+      
+      return [
+        m.ts,
+        m.modelo,
+        m.imu?.roll || 0,
+        m.imu?.pitch || 0,
+        m.imu?.yaw || 0,
+        m.imu?.ax || 0,
+        m.imu?.ay || 0,
+        m.imu?.az || 0,
+        m.bms?.soc || 0,
+        m.bms?.corriente || 0,
+        m.bms?.temperatura || 0,
+        escapeJSON(m.bms?.celdas || []),
+        escapeJSON(m.fuerzas || {}),
+        escapeJSON(m.motores || [])
+      ].join(',');
+    });
+    
     const csvContent = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const urlBlob = URL.createObjectURL(blob);
