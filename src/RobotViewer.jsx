@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Environment, Center } from '@react-three/drei';
+import { OrbitControls, useGLTF, Environment, Center, ContactShadows, Grid } from '@react-three/drei';
 
 function ModelG1({ motors = [] }) {
   const { scene, nodes } = useGLTF('/Ottoman.glb');
@@ -46,7 +46,6 @@ function ModelQuadruped({ motors = [] }) {
     }
     const deg2rad = Math.PI / 180;
 
-    // Función auxiliar para aplicar rotación en un eje específico (x, y o z)
     const applyRot = (nodeName, axis = 'x') => {
       const node = nodes[nodeName];
       if (node && motorDict[nodeName] !== undefined) {
@@ -54,17 +53,8 @@ function ModelQuadruped({ motors = [] }) {
       }
     };
 
-    // MAPEO CUADRÚPEDO: Nombre del nodo en Blender coincide con la telemetría
-    // ATENCIÓN: Si las patas rotan en una dirección extraña, cambiá la letra 'x' 
-    // por 'y' o 'z' según cómo estén orientados los ejes locales en Blender.
-    
-    // Caderas (Abducción/Aducción) - Suele ser el eje Z o Y dependiendo del export
     ['FL_hip', 'FR_hip', 'RL_hip', 'RR_hip'].forEach(m => applyRot(m, 'z')); 
-    
-    // Muslos (Adelante/Atrás) - Suele ser el eje X
     ['FL_thigh', 'FR_thigh', 'RL_thigh', 'RR_thigh'].forEach(m => applyRot(m, 'x'));
-    
-    // Rodillas (Flexión/Extensión) - Suele ser el eje X
     ['FL_calf', 'FR_calf', 'RL_calf', 'RR_calf'].forEach(m => applyRot(m, 'x'));
   });
 
@@ -79,11 +69,13 @@ export default function RobotViewer({ motors = [], modelType = 'quadruped' }) {
         <directionalLight position={[10, 10, 5]} intensity={1.5} />
         <Environment preset="city" />
         <Suspense fallback={null}>
-          <Center position={[0, 0.9, 0]}>
+          <group position={[0, 0, 0]}>
             {modelType === 'g1' ? <ModelG1 motors={motors} /> : <ModelQuadruped motors={motors} />}
-          </Center>
+          </group>
+          <ContactShadows resolution={1024} scale={10} blur={2} opacity={0.6} far={10} color="#000000" position={[0, 0, 0]} />
+          <Grid infiniteGrid fadeDistance={15} sectionColor="#42e8e0" sectionThickness={1} cellColor="#26313b" cellThickness={0.6} position={[0, -0.01, 0]} />
         </Suspense>
-        <OrbitControls makeDefault target={[0, 0, 0]} />
+        <OrbitControls makeDefault target={[0, 0.6, 0]} maxPolarAngle={Math.PI / 2 + 0.1} />
       </Canvas>
     </div>
   );
