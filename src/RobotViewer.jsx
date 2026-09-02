@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Environment, Center, ContactShadows, Grid } from '@react-three/drei';
 
+//Easter egg
 function useDanceMode() {
   const [dancing, setDancing] = React.useState(false);
   React.useEffect(() => {
@@ -20,7 +21,7 @@ function useDanceMode() {
 function ModelG1({ motors = [], imu }) {
   const { scene, nodes } = useGLTF('/Ottoman.glb');
   const isDancing = useDanceMode();
-  
+
   useFrame((state) => {
     if (!nodes) return;
     const deg2rad = Math.PI / 180;
@@ -28,7 +29,7 @@ function ModelG1({ motors = [], imu }) {
     if (isDancing) {
       const t = state.clock.elapsedTime;
       const bpm = 120;
-      const beat = (t * bpm / 60) * Math.PI * 2; 
+      const beat = (t * bpm / 60) * Math.PI * 2;
 
       scene.position.y = Math.abs(Math.sin(beat)) * 0.04;
 
@@ -52,15 +53,15 @@ function ModelG1({ motors = [], imu }) {
         nodes['R_hip'].rotation.z = Math.sin(beat * 0.5 + Math.PI) * 5 * deg2rad;
       }
 
-      const kneeBase = -15; 
+      const kneeBase = -15;
       if (nodes['L_knee']) nodes['L_knee'].rotation.x = (kneeBase + Math.abs(legPhaseL) * -20) * deg2rad;
       if (nodes['R_knee']) nodes['R_knee'].rotation.x = (kneeBase + Math.abs(legPhaseR) * -20) * deg2rad;
 
       const armWaveL = Math.sin(beat * 0.5);
-      const armWaveR = Math.sin(beat * 0.5 + Math.PI); 
+      const armWaveR = Math.sin(beat * 0.5 + Math.PI);
 
       if (nodes['L_shoulder']) {
-        const raise = (armWaveL * 0.5 + 0.5); 
+        const raise = (armWaveL * 0.5 + 0.5);
         nodes['L_shoulder'].rotation.x = (raise * 130 + 10) * deg2rad;
         nodes['L_shoulder'].rotation.z = (20 + raise * 15) * deg2rad;
         nodes['L_shoulder'].rotation.y = Math.sin(beat * 0.25) * 15 * deg2rad;
@@ -75,9 +76,9 @@ function ModelG1({ motors = [], imu }) {
       if (nodes['L_elbow']) nodes['L_elbow'].rotation.x = (-30 + Math.sin(beat * 0.5 - 0.4) * -25) * deg2rad;
       if (nodes['R_elbow']) nodes['R_elbow'].rotation.x = (-30 + Math.sin(beat * 0.5 + Math.PI - 0.4) * -25) * deg2rad;
 
-      return; 
+      return;
     }
-    
+
     scene.position.y = 0;
     if (nodes['pelvis']) nodes['pelvis'].rotation.z = 0;
     if (nodes['torso']) nodes['torso'].rotation.y = 0;
@@ -120,7 +121,7 @@ function ModelG1({ motors = [], imu }) {
 
 function ModelQuadruped({ motors = [] }) {
   const { scene, nodes } = useGLTF('/Perro.glb');
-  
+
   useFrame(() => {
     if (!nodes) return;
     const motorDict = {};
@@ -136,7 +137,7 @@ function ModelQuadruped({ motors = [] }) {
       }
     };
 
-    ['FL_hip', 'FR_hip', 'RL_hip', 'RR_hip'].forEach(m => applyRot(m, 'z')); 
+    ['FL_hip', 'FR_hip', 'RL_hip', 'RR_hip'].forEach(m => applyRot(m, 'z'));
     ['FL_thigh', 'FR_thigh', 'RL_thigh', 'RR_thigh'].forEach(m => applyRot(m, 'x'));
     ['FL_calf', 'FR_calf', 'RL_calf', 'RR_calf'].forEach(m => applyRot(m, 'x'));
   });
