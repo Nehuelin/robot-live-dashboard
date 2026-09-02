@@ -202,9 +202,13 @@ function TelemetryDashboard() {
       <Panel title="SISTEMA DE ENERGÍA" meta="BMS" className="battery-panel"><Battery bms={telemetry.bms}/></Panel>
       <Panel title="CONTACTO CON SUPERFICIE" meta={telemetry.modelo?.toUpperCase()} className="forces-panel"><FootForces forces={telemetry.fuerzas} model={telemetry.modelo}/></Panel>
       <Panel title="ACTUADORES" meta="STREAM 10 HZ" className="motors-panel"><MotorTable motors={motors}/></Panel>
-      {telemetry.modelo?.toLowerCase() === 'g1' && (
+      {telemetry.modelo?.toLowerCase() === 'g1' ? (
         <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
-          <RobotViewer motors={motors} />
+          <RobotViewer motors={motors} modelType="g1" />
+        </Panel>
+      ) : (
+        <Panel title="VISOR 3D (PERRO)" meta={telemetry.modelo?.toUpperCase() || 'CUADRÚPEDO'} className="model-panel">
+          <RobotViewer motors={motors} modelType="quadruped" />
         </Panel>
       )}
     </main>
