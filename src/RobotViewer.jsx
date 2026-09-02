@@ -76,7 +76,7 @@ function ModelQuadruped({ motors = [] }) {
   return <primitive object={scene} scale={1.8} />;
 }
 
-export default function RobotViewer({ motors = [], modelType = 'quadruped' }) {
+export default function RobotViewer({ motors = [], modelType = 'quadruped', imu }) {
   return (
     <div style={{ width: '100%', height: '100%', minHeight: '350px', flex: 1 }}>
       <Canvas camera={{ position: [2, 1, 3], fov: 50 }}>
@@ -85,7 +85,7 @@ export default function RobotViewer({ motors = [], modelType = 'quadruped' }) {
         <Environment preset="city" />
         <Suspense fallback={null}>
           <group position={[0, 0, 0]}>
-            {modelType === 'g1' ? <ModelG1 motors={motors} /> : <ModelQuadruped motors={motors} />}
+            {modelType === 'g1' ? <ModelG1 motors={motors} imu={imu} /> : <ModelQuadruped motors={motors} imu={imu} />}
           </group>
           <ContactShadows resolution={1024} scale={10} blur={2} opacity={0.6} far={10} color="#000000" position={[0, 0, 0]} />
           <Grid infiniteGrid fadeDistance={15} sectionColor="#42e8e0" sectionThickness={1} cellColor="#26313b" cellThickness={0.6} position={[0, -0.01, 0]} />
