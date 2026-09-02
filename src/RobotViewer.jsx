@@ -2,16 +2,64 @@ import React, { Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Environment, Center, ContactShadows, Grid } from '@react-three/drei';
 
+// 🤫 Easter Egg Hook
+function useDanceMode() {
+  const [dancing, setDancing] = React.useState(false);
+  React.useEffect(() => {
+    let keys = '';
+    const handleKeyDown = (e) => {
+      keys += e.key.toLowerCase();
+      if (keys.length > 5) keys = keys.slice(-5);
+      if (keys === 'dance') setDancing(d => !d);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+  return dancing;
+}
+
 function ModelG1({ motors = [], imu }) {
   const { scene, nodes } = useGLTF('/Ottoman.glb');
+  const isDancing = useDanceMode();
   
-  useFrame(() => {
+  useFrame((state) => {
     if (!nodes) return;
+    const deg2rad = Math.PI / 180;
+
+    if (isDancing) {
+      const t = state.clock.elapsedTime * 6;
+      
+      // Disco Squats (rebote de rodillas y caderas)
+      const squat = -Math.abs(Math.sin(t * 0.5)) * 40; 
+      if (nodes['L_knee']) nodes['L_knee'].rotation.x = squat * deg2rad;
+      if (nodes['R_knee']) nodes['R_knee'].rotation.x = squat * deg2rad;
+      if (nodes['L_hip']) nodes['L_hip'].rotation.x = -squat * 0.5 * deg2rad;
+      if (nodes['R_hip']) nodes['R_hip'].rotation.x = -squat * 0.5 * deg2rad;
+      
+      // Movimiento de pelvis y torso (Saturday Night Fever)
+      if (nodes['torso']) nodes['torso'].rotation.y = Math.sin(t * 0.25) * 30 * deg2rad;
+      if (nodes['pelvis']) nodes['pelvis'].rotation.z = Math.cos(t * 0.5) * 15 * deg2rad;
+      
+      // Brazos alternando arriba y abajo (Disco)
+      const armBeat = Math.sin(t * 0.25) > 0;
+      if (nodes['L_shoulder']) {
+        nodes['L_shoulder'].rotation.x = (armBeat ? 130 : 0) * deg2rad;
+        nodes['L_shoulder'].rotation.z = (armBeat ? 30 : 20) * deg2rad;
+      }
+      if (nodes['R_shoulder']) {
+        nodes['R_shoulder'].rotation.x = (!armBeat ? 130 : 0) * deg2rad;
+        nodes['R_shoulder'].rotation.z = (!armBeat ? -30 : -20) * deg2rad;
+      }
+      if (nodes['L_elbow']) nodes['L_elbow'].rotation.x = (armBeat ? -20 : -60) * deg2rad;
+      if (nodes['R_elbow']) nodes['R_elbow'].rotation.x = (!armBeat ? -20 : -60) * deg2rad;
+
+      return; // Cortamos aca para que no aplique la telemetria real mientras baila
+    }
+
     const motorDict = {};
     for (let i = 0; i < motors.length; i++) {
       motorDict[motors[i].nombre] = motors[i].angulo;
     }
-    const deg2rad = Math.PI / 180;
 
     // Aplicamos la rotacion real del IMU a toda la malla. 
     // Esto es lo que determina si el robot esta parado o acostado en el mundo real.
@@ -32,10 +80,9 @@ function ModelG1({ motors = [], imu }) {
       if (rollName && motorDict[rollName] !== undefined) node.rotation.z = motorDict[rollName] * deg2rad;
     };
 
-    // NO aplicamos rotacion de motores al 'torso'. 
-    // En este GLTF, el 'torso' es el hueso ROOT (padre de las piernas). 
-    // Si le aplicamos el motor de la cintura, todo el robot (incluidas las piernas) gira hacia arriba.
-    // applyRot('torso', 'torso_pitch', 'torso_yaw', 'torso_roll');
+    // Ahora que el modelo tiene el hueso 'pelvis' como padre, podemos 
+    // mover el torso de forma independiente a las piernas.
+    applyRot('torso', 'torso_pitch', 'torso_yaw', 'torso_roll');
 
     applyRot('L_shoulder', 'L_shoulder_pitch', 'L_shoulder_yaw', 'L_shoulder_roll');
     applyRot('L_elbow', 'L_elbow', null, null);
