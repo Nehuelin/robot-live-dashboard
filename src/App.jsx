@@ -33,11 +33,15 @@ function TelemetryDashboard() {
     try {
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = normalizeTelemetry(await response.json());
+      const data = await response.json();
+      console.log('📡 [API] Datos recibidos de /telemetria:', data);
+      const payload = normalizeTelemetry(data);
+      console.log('⚙️ [API] Telemetría normalizada:', payload);
       setTelemetry(payload);
       setStatus('live');
       return payload;
     } catch (error) {
+      console.error('❌ [API] Error al obtener /telemetria:', error);
       setStatus('error');
       return null;
     }
@@ -49,10 +53,12 @@ function TelemetryDashboard() {
     try {
       const response = await fetch(apiUrl);
       if (response.ok) {
-        setRobotInfo(await response.json());
+        const infoData = await response.json();
+        console.log('ℹ️ [API] Datos recibidos de /info:', infoData);
+        setRobotInfo(infoData);
       }
     } catch (error) {
-      console.warn('Could not fetch /info', error);
+      console.warn('⚠️ [API] Could not fetch /info', error);
     }
   };
 
@@ -91,10 +97,13 @@ function TelemetryDashboard() {
     ws.onopen = () => setStatus('live');
     ws.onmessage = (event) => {
       try {
-        const nextTelemetry = normalizeTelemetry(JSON.parse(event.data));
+        const data = JSON.parse(event.data);
+        console.log('🔄 [WebSocket] Mensaje recibido de /ws:', data);
+        const nextTelemetry = normalizeTelemetry(data);
         setTelemetry(nextTelemetry);
         setStatus('live');
-      } catch {
+      } catch (err) {
+        console.error('❌ [WebSocket] Error parseando datos:', err);
         setStatus('error');
       }
     };
