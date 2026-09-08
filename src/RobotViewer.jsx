@@ -45,11 +45,11 @@ function ModelG1({ motors = [], imu }) {
       const legPhaseR = Math.sin(beat * 0.5 + Math.PI);
 
       if (nodes['L_hip']) {
-        nodes['L_hip'].rotation.x = legPhaseL * 15 * deg2rad;
+        nodes['L_hip'].rotation.x = legPhaseL * 50 * deg2rad;
         nodes['L_hip'].rotation.z = Math.sin(beat * 0.5) * 5 * deg2rad;
       }
       if (nodes['R_hip']) {
-        nodes['R_hip'].rotation.x = legPhaseR * 15 * deg2rad;
+        nodes['R_hip'].rotation.x = legPhaseR * 50 * deg2rad;
         nodes['R_hip'].rotation.z = Math.sin(beat * 0.5 + Math.PI) * 5 * deg2rad;
       }
 
@@ -62,13 +62,13 @@ function ModelG1({ motors = [], imu }) {
 
       if (nodes['L_shoulder']) {
         const raise = (armWaveL * 0.5 + 0.5);
-        nodes['L_shoulder'].rotation.x = (raise * 130 + 10) * deg2rad;
+        nodes['L_shoulder'].rotation.x = (raise * -130 + 10) * deg2rad;
         nodes['L_shoulder'].rotation.z = (20 + raise * 15) * deg2rad;
         nodes['L_shoulder'].rotation.y = Math.sin(beat * 0.25) * 15 * deg2rad;
       }
       if (nodes['R_shoulder']) {
         const raise = (armWaveR * 0.5 + 0.5);
-        nodes['R_shoulder'].rotation.x = (raise * 130 + 10) * deg2rad;
+        nodes['R_shoulder'].rotation.x = (raise * -130 + 10) * deg2rad;
         nodes['R_shoulder'].rotation.z = -(20 + raise * 15) * deg2rad;
         nodes['R_shoulder'].rotation.y = Math.sin(beat * 0.25 + Math.PI) * 15 * deg2rad;
       }
