@@ -1,243 +1,310 @@
-import { useEffect, useRef, useState } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import "./App.css";
+import "./DashboardLayout.css";
+import { readSavedUrl, sanitizeBaseUrl, fmt } from "./utils";
+import { readProfiles, saveProfiles, DEMO_URLS } from "./connectionProfiles";
+import { MainNavigation } from "./components/MainNavigation";
+import { RobotInformation } from "./components/RobotInformation";
+import { useTelemetryConnection } from "./useTelemetryConnection";
+import { downloadSamples } from "./csv";
+import { Panel, Metric } from "./components/Shared";
+import { PanelSettings } from "./components/PanelSettings";
+import { useDashboardView } from "./useDashboardView";
+import { useDashboardLayout } from "./useDashboardLayout";
+import { resolveViewerSelection } from "./dashboardPreferences";
+import { ViewerBoundary } from "./components/ViewerBoundary";
+import { ConnectionBar } from "./components/ConnectionBar";
+import { BatteryPanel } from "./components/BatteryPanel";
+import { FootForces } from "./components/FootForces";
+import { MotorTable } from "./components/MotorTable";
+import { OrientationPanel } from "./components/OrientationPanel";
+const RobotViewer = lazy(() => import("./RobotViewer"));
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+);
 
-import './App.css';
-import { EMPTY_TELEMETRY, normalizeTelemetry, buildApiUrl, sanitizeBaseUrl, fmt } from './utils';
-import { Panel, Metric } from './components/Shared';
-import { ConnectionBar } from './components/ConnectionBar';
-import { BatteryPanel } from './components/BatteryPanel';
-import { FootForces } from './components/FootForces';
-import { MotorTable } from './components/MotorTable';
-import { OrientationPanel } from './components/OrientationPanel';
-import RobotViewer from './RobotViewer';
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
-
-function TelemetryDashboard() {
-  const [telemetry, setTelemetry] = useState(EMPTY_TELEMETRY);
+export default function TelemetryDashboard() {
+  const [url, setUrl] = useState(readSavedUrl);
+  const [profiles, setProfiles] = useState(readProfiles);
+  const [activeProfile, setActiveProfile] = useState(
+    () => readProfiles().selected,
+  );
+  const [section, setSection] = useState("dashboard");
+  useEffect(() => saveProfiles(profiles), [profiles]);
   const [muestras, setMuestras] = useState([]);
-  const [url, setUrl] = useState(() => localStorage.getItem('robot-api-url') || 'http://10.100.45.68:8001');
-  const [status, setStatus] = useState('connecting');
-  const [robotInfo, setRobotInfo] = useState(null);
-  const socketRef = useRef(null);
-  const retryRef = useRef(null);
-  const intentionalClose = useRef(false);
-
-  const fetchTelemetry = async (baseUrl) => {
-    const apiUrl = buildApiUrl(baseUrl, '/telemetria');
-    if (!apiUrl) {
-      setStatus('error');
-      return null;
+  const [viewerMode, setViewerMode] = useState("auto");
+  const [viewerInitialized, setViewerInitialized] = useState(false);
+  const view = useDashboardView(section === "dashboard");
+  const layoutRef = useRef(null);
+  const layout = useDashboardLayout(layoutRef, view.visible, view.focused);
+  const connection = useTelemetryConnection(url);
+  const { telemetry, status, model } = connection;
+  const connectProfile = (value, id = profiles.selected) => {
+    const base = sanitizeBaseUrl(value);
+    if (base) {
+      setUrl(base);
+      setProfiles((prev) => ({
+        ...prev,
+        selected: id,
+        urls: { ...prev.urls, [id]: base },
+      }));
+      setActiveProfile(id);
     }
-
-    try {
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      console.log('📡 [API] Datos recibidos de /telemetria:', data);
-      const payload = normalizeTelemetry(data);
-      console.log('⚙️ [API] Telemetría normalizada:', payload);
-      setTelemetry(payload);
-      setStatus('live');
-      return payload;
-    } catch (error) {
-      console.error('❌ [API] Error al obtener /telemetria:', error);
-      setStatus('error');
-      return null;
-    }
+    connection.connect(value);
   };
-
-  const fetchInfo = async (baseUrl) => {
-    const apiUrl = buildApiUrl(baseUrl, '/info');
-    if (!apiUrl) return;
-    try {
-      const response = await fetch(apiUrl);
-      if (response.ok) {
-        const infoData = await response.json();
-        console.log('ℹ️ [API] Datos recibidos de /info:', infoData);
-        setRobotInfo(infoData);
-      }
-    } catch (error) {
-      console.warn('⚠️ [API] Could not fetch /info', error);
-    }
+  const selectProfile = (id) => {
+    setProfiles((prev) => ({ ...prev, selected: id }));
+    const value = profiles.urls[id];
+    setUrl(value);
+    if (value) connectProfile(value, id);
   };
-
-  const connect = async () => {
-    clearTimeout(retryRef.current);
-    intentionalClose.current = false;
-    if (socketRef.current) {
-      socketRef.current.onclose = null;
-      socketRef.current.close();
-    }
-
-    const baseUrl = sanitizeBaseUrl(url);
-    if (!baseUrl) {
-      setStatus('error');
-      return;
-    }
-
-    setStatus('connecting');
-    localStorage.setItem('robot-api-url', baseUrl);
-    await fetchInfo(baseUrl);
-    await fetchTelemetry(baseUrl);
-
-    let wsUrl;
-    try {
-      const parsed = new URL(baseUrl);
-      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      parsed.pathname = '/ws';
-      wsUrl = parsed.toString();
-    } catch {
-      setStatus('error');
-      return;
-    }
-
-    const ws = new WebSocket(wsUrl);
-    socketRef.current = ws;
-    ws.onopen = () => setStatus('live');
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('🔄 [WebSocket] Mensaje recibido de /ws:', data);
-        const nextTelemetry = normalizeTelemetry(data);
-        setTelemetry(nextTelemetry);
-        setStatus('live');
-      } catch (err) {
-        console.error('❌ [WebSocket] Error parseando datos:', err);
-        setStatus('error');
-      }
-    };
-    ws.onerror = () => setStatus('error');
-    ws.onclose = () => {
-      if (!intentionalClose.current) {
-        setStatus('error');
-        retryRef.current = setTimeout(() => {
-          connect();
-        }, 3000);
-      }
-    };
-  };
-
-  useEffect(() => {
-    connect();
-    return () => {
-      intentionalClose.current = true;
-      clearTimeout(retryRef.current);
-      socketRef.current?.close();
-    };
-  }, []);
-
-  const motors = Array.isArray(telemetry.motores) ? telemetry.motores : [];
-  const avgTemp = motors.length ? motors.reduce((sum, motor) => sum + Number(motor.temperatura || 0), 0) / motors.length : 0;
-  const maxTorque = motors.length ? Math.max(...motors.map((motor) => Math.abs(Number(motor.torque || 0)))) : 0;
-
+  const dashboardActive = section === "dashboard";
+  const motors = telemetry.motores;
+  const temperatures = motors
+    .map((m) => m.temperatura)
+    .filter((v) => v !== null);
+  const torques = motors.map((m) => m.torque).filter((v) => v !== null);
+  const avgTemp = temperatures.length
+    ? temperatures.reduce((a, b) => a + b, 0) / temperatures.length
+    : null;
+  const maxTorque = torques.length ? Math.max(...torques.map(Math.abs)) : null;
   const captureSample = () => {
-    setMuestras(prev => [...prev, telemetry]);
+    if (connection.canCapture()) setMuestras((prev) => [...prev, telemetry]);
   };
-
-  const exportCSV = () => {
-    if (muestras.length === 0) return;
-    const headers = [
-      'ts', 'modelo',
-      'imu_roll', 'imu_pitch', 'imu_yaw', 'imu_ax', 'imu_ay', 'imu_az',
-      'bms_soc', 'bms_corriente', 'bms_temp', 'bms_celdas',
-      'fuerzas', 'motores'
-    ];
-    const rows = muestras.map(m => {
-      const escapeJSON = (obj) => `"${JSON.stringify(obj || {}).replace(/"/g, '""')}"`;
-      
-      return [
-        m.ts,
-        m.modelo,
-        m.imu?.roll || 0,
-        m.imu?.pitch || 0,
-        m.imu?.yaw || 0,
-        m.imu?.ax || 0,
-        m.imu?.ay || 0,
-        m.imu?.az || 0,
-        m.bms?.soc || 0,
-        m.bms?.corriente || 0,
-        m.bms?.temperatura || 0,
-        escapeJSON(m.bms?.celdas || []),
-        escapeJSON(m.fuerzas || {}),
-        escapeJSON(m.motores || [])
-      ].join(',');
-    });
-    
-    const csvContent = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const urlBlob = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = urlBlob;
-    a.download = `muestras_telemetria_${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(urlBlob);
-  };
-
-  const isG1 = robotInfo
-    ? (robotInfo.tipo?.toLowerCase() === 'g1' || robotInfo.nombre?.toLowerCase() === 'g1' || robotInfo.modelo?.toLowerCase() === 'g1')
-    : (telemetry.modelo?.toLowerCase() === 'g1');
+  const selection = resolveViewerSelection(
+    viewerMode,
+    model,
+    connection.hasCurrentData,
+  );
+  const viewerActive = dashboardActive && view.isActive("model");
+  const mountViewer =
+    Boolean(selection.model) && (viewerInitialized || viewerActive);
+  // Retain an already visited scene, but never load a model for an initially hidden panel.
+  if (mountViewer && !viewerInitialized) setViewerInitialized(true);
+  const panelProps = (id) => ({
+    id,
+    style: layout.panels[id],
+    hidden: !view.isActive(id),
+    maximized: view.focused === id,
+    onMaximize: (button) => view.toggleMaximize(id, button),
+  });
+  const visibleCount = Object.values(view.visible).filter(Boolean).length;
 
   return (
-    <div className="dashboard-container">
+    <div className={`dashboard-container ${view.focused ? "is-focused" : ""}`}>
+      <a
+        className="skip-link"
+        href={dashboardActive ? "#telemetry" : "#robot-information"}
+      >
+        Ir al contenido
+      </a>
       <header className="dashboard-header">
         <div>
           <p>UNITREE · LIVE SYSTEMS</p>
-          <h1>TELEMETRÍA <span>// MOTION LAB</span></h1>
+          <h1>
+            TELEMETRÍA <span>// MOTION LAB</span>
+          </h1>
         </div>
-        <div className="header-summary" style={{ alignItems: 'center' }}>
-          <button type="button" onClick={captureSample} style={{ background: '#26313b', color: '#fff', fontSize: '11px', padding: '6px 12px' }}>
+        <div className="header-summary" hidden={!dashboardActive}>
+          <button
+            type="button"
+            className="capture-button"
+            aria-label={`Capturar muestra (${muestras.length})`}
+            disabled={!connection.canCapture()}
+            onClick={captureSample}
+            title="Capturar la última muestra válida y reciente"
+          >
             📸 CAPTURAR ({muestras.length})
           </button>
-          {muestras.length > 0 && (
-            <button type="button" onClick={exportCSV} style={{ fontSize: '11px', padding: '6px 12px' }}>
-              📥 EXPORTAR CSV
-            </button>
-          )}
-          <Metric label="MOTORES" value={motors.length} unit="activos" />
+          <button
+            type="button"
+            className="export-button"
+            aria-label="Exportar CSV"
+            disabled={!muestras.length}
+            onClick={() => downloadSamples(muestras)}
+          >
+            📥 EXPORTAR CSV
+          </button>
+          <PanelSettings
+            key={`${view.focused || "layout"}-${section}`}
+            visible={view.visible}
+            focused={view.focused}
+            onToggle={view.toggleVisible}
+            onReset={view.reset}
+            onOpenChange={view.setOverlayOpen}
+          />
+          <Metric label="MOTORES" value={motors.length || "—"} unit="activos" />
           <Metric label="TEMP. MEDIA" value={fmt(avgTemp)} unit="°C" />
           <Metric label="TORQUE PICO" value={fmt(maxTorque, 2)} unit="Nm" />
         </div>
       </header>
-
-      <ConnectionBar
-        url={url}
-        onUrlChange={setUrl}
-        status={status}
-        onConnect={connect}
-        model={telemetry.modelo}
-        timestamp={telemetry.ts}
-      />
-
-      <main className="telemetry-layout">
-        <Panel title="ORIENTACIÓN / IMU" meta="6-AXIS" className="orientation-panel">
-          <OrientationPanel imu={telemetry.imu} timestamp={telemetry.ts} />
-        </Panel>
-
-        <Panel title="SISTEMA DE ENERGÍA" meta="BMS" className="battery-panel">
-          <BatteryPanel bms={telemetry.bms} />
-        </Panel>
-
-        <Panel title="CONTACTO CON SUPERFICIE" meta={telemetry.modelo?.toUpperCase()} className="forces-panel">
-          <FootForces forces={telemetry.fuerzas} model={telemetry.modelo} />
-        </Panel>
-
-        <Panel title="ACTUADORES" meta="STREAM 10 HZ" className="motors-panel">
-          <MotorTable motors={motors} />
-        </Panel>
-
-        {isG1 ? (
-          <Panel title="VISOR 3D (OTTOMAN)" meta="MODELO G1" className="model-panel">
-            <RobotViewer motors={motors} modelType="g1" imu={telemetry.imu} />
+      <MainNavigation active={section} onChange={setSection} />
+      <section
+        role="tabpanel"
+        id="section-dashboard"
+        aria-labelledby="tab-dashboard"
+        hidden={!dashboardActive}
+      >
+        <ConnectionBar
+          url={url}
+          onUrlChange={setUrl}
+          status={status}
+          onConnect={() => connectProfile(url)}
+          model={model}
+          timestamp={telemetry.ts}
+          error={connection.error}
+          profile={profiles.selected}
+          activeProfile={activeProfile}
+          activeUrl={connection.activeUrl}
+          onProfileChange={selectProfile}
+          onUseDemo={() => connectProfile(DEMO_URLS[profiles.selected])}
+          simulation={connection.robotInfo?.simulation === true}
+        />
+        <main
+          ref={layoutRef}
+          id="telemetry"
+          className={`telemetry-layout ${view.focused ? "focused-layout" : ""} ${visibleCount === 1 ? "single-panel" : ""}`}
+        >
+          <Panel
+            {...panelProps("orientation")}
+            title="Orientación / IMU"
+            meta="6-AXIS"
+            className="orientation-panel"
+          >
+            <OrientationPanel
+              key={connection.sessionId}
+              imu={telemetry.imu}
+              timestamp={telemetry.ts}
+              valid={connection.hasCurrentData}
+              sequence={connection.sequence}
+              active={dashboardActive && view.isActive("orientation")}
+            />
           </Panel>
-        ) : (
-          <Panel title="VISOR 3D (PERRO)" meta={telemetry.modelo?.toUpperCase() || 'CUADRÚPEDO'} className="model-panel">
-            <RobotViewer motors={motors} modelType="quadruped" imu={telemetry.imu} />
+          <Panel
+            {...panelProps("battery")}
+            title="Sistema de energía"
+            meta="BMS"
+            className="battery-panel"
+          >
+            <BatteryPanel bms={telemetry.bms} />
           </Panel>
-        )}
-      </main>
+          <Panel
+            {...panelProps("forces")}
+            title="Contacto con superficie"
+            meta={model ? model.toUpperCase() : "—"}
+            className="forces-panel"
+          >
+            <FootForces forces={telemetry.fuerzas} model={model} />
+          </Panel>
+          <Panel
+            {...panelProps("motors")}
+            title="Actuadores"
+            meta="TELEMETRÍA"
+            className="motors-panel"
+          >
+            <MotorTable motors={motors} />
+          </Panel>
+          <Panel
+            {...panelProps("model")}
+            title={
+              selection.model === "g1"
+                ? "Visor 3D (Ottoman)"
+                : "Visor 3D (Perro)"
+            }
+            meta={selection.model ? selection.model.toUpperCase() : "3D"}
+            className="model-panel"
+          >
+            <div className="viewer-toolbar">
+              <label htmlFor="viewer-mode">VISUALIZACIÓN</label>
+              <select
+                id="viewer-mode"
+                aria-label="Modelo del visor 3D"
+                value={viewerMode}
+                onChange={(event) => setViewerMode(event.target.value)}
+              >
+                <option value="auto">Automático</option>
+                <option value="g1">Humanoide (G1)</option>
+                <option value="go2">Perro (Go2)</option>
+              </select>
+            </div>
+            {selection.manual && (
+              <p className="viewer-mode-note">
+                Manual: {selection.model.toUpperCase()} · Telemetría:{" "}
+                {model ? model.toUpperCase() : "sin identificar"}
+                {selection.neutral
+                  ? " · Pose neutral; sin movimientos de telemetría incompatibles."
+                  : ""}
+              </p>
+            )}
+            {mountViewer ? (
+              <ViewerBoundary>
+                <Suspense
+                  fallback={
+                    <div className="viewer-message">
+                      <span className="loader" />
+                      Preparando visor 3D…
+                    </div>
+                  }
+                >
+                  <RobotViewer
+                    motors={selection.neutral ? [] : motors}
+                    modelType={selection.model === "g1" ? "g1" : "quadruped"}
+                    imu={selection.neutral ? undefined : telemetry.imu}
+                    neutral={selection.neutral}
+                    active={viewerActive}
+                  />
+                </Suspense>
+              </ViewerBoundary>
+            ) : (
+              <div className="viewer-message">
+                <strong>Esperando al robot</strong>
+                <span>
+                  Selecciona un modelo manual para explorarlo sin conexión.
+                </span>
+              </div>
+            )}
+            <div className="viewer-caption">
+              <span>Arrastra para orbitar · Scroll para acercar</span>
+              <span>
+                {selection.manual ? "VISTA MANUAL" : "VISTA AUTOMÁTICA"}
+              </span>
+            </div>
+          </Panel>
+          {visibleCount === 0 && (
+            <div className="dashboard-empty" role="status">
+              <h2>Todos los paneles están ocultos</h2>
+              <p>La conexión y las capturas siguen disponibles.</p>
+              <button type="button" onClick={view.reset}>
+                Restablecer paneles
+              </button>
+            </div>
+          )}
+        </main>
+      </section>
+      <section
+        role="tabpanel"
+        id="section-information"
+        aria-labelledby="tab-information"
+        hidden={dashboardActive}
+      >
+        <RobotInformation />
+      </section>
     </div>
   );
 }
-
-export default TelemetryDashboard;
